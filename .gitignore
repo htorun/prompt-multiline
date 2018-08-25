@@ -1,0 +1,9 @@
+# editor temporary and/or backup files
+*~
+*.sw?
+Session.vim
+
+# backup files in general
+*.bak
+*.old
+*.orig

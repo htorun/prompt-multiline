@@ -1,0 +1,297 @@
+#!/bin/bash
+
+############################
+# Hami's multiline prompt #
+############################
+#
+# Changes the bash prompt to a colored multi-line prompt.
+#
+# IMPORTANT: You should 'source' this script from
+# the calling shell script or shell. :
+# 'source .prompt-multiline' or '. .prompt-multiline'
+#
+# If you execute it like './.prompt-multiline' in a shell,
+# commands will be executed in a subshell and prompt of the
+# calling shell will not change.
+#
+# Based on:
+#   * Bash Prompt HOWTO (https://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/index.html)
+#   * Liquidprompt (https://github.com/nojhan/liquidprompt.git)
+#
+# Author: Hami Galip Torun <htorun@e-fabrika.net>
+#
+# Licensed under the AGPL version 3
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Trim the working dir path to last 4 dirs
+PROMPT_DIRTRIM=4
+
+# Colors are according to "Solarized" colorscheme
+# Solarized dark theme:
+#
+# Solarized color  Terminal color  Desc.
+# ---------------  --------------  -----------------------------------
+#     base03             08        solarized bg (terminal bg)
+#     base02             00        solarized bg highlight
+#     base01             10        solarized comment/secondary content
+#     base0              12        solarized body text/primary content
+
+# Solarized light theme:
+#
+# Solarized color  Terminal color  Desc.
+# ---------------  --------------  -----------------------------------
+#     base3              15        solarized bg (terminal bg)
+#     base2              07        solarized bg highlight
+#     base1              14        solarized comment/secondary content
+#     base00             11        solarized body text/primary content
+
+# Solarized accent colors:
+# yellow    : terminal color 03
+# orange    : terminal color 09
+# red       : terminal color 01
+# magenta   : terminal color 05
+# violet    : terminal color 13
+# blue      : terminal color 04
+# cyan      : terminal color 06
+# green     : terminal color 02
+
+PM_RED="\[$(tput setaf 1)\]"
+PM_GREEN="\[$(tput setaf 2)\]"
+PM_YELLOW="\[$(tput setaf 3)\]"
+#PM_BLUE="\[$(tput setaf 4)\]"
+#PM_MAGENTA="\[$(tput setaf 5)\]"
+PM_CYAN="\[$(tput setaf 6)\]"
+PM_LIGHT_BG_HI="\[$(tput setaf 7)\]"
+#PM_ORANGE="\[$(tput setaf 9)\]"
+PM_DARK_BG_SECONDARY="\[$(tput setaf 10)\]"
+
+PM_BOLD="\[$(tput bold)\]"
+PM_START_UNDERLINE="\[$(tput smul)\]"
+PM_STOP_UNDERLINE="\[$(tput rmul)\]"
+PM_RESET="\[$(tput sgr0)\]"
+
+PM_STYLE_ERR=${PM_STYLE_ERR:-$PM_RED}
+PM_STYLE_CHROOT=${PM_STYLE_CHROOT:-$PM_CYAN}
+PM_STYLE_ROOT=${PM_STYLE_ROOT:-$PM_BOLD$PM_RED}
+PM_STYLE_PATH=${PM_STYLE_PATH:-$PM_DARK_BG_SECONDARY}
+PM_STYLE_JOBS=${PM_STYLE_JOBS:-$PM_LIGHT_BG_HI}
+PM_STYLE_GIT=${PM_STYLE_GIT:-$PM_GREEN}
+PM_STYLE_GIT_CHANGES=${PM_STYLE_GIT_CHANGES:-$PM_RED}
+PM_STYLE_GIT_COMMITS=${PM_STYLE_GIT_COMMITS:-$PM_YELLOW}
+PM_STYLE_SYMBOL=${PM_STYLE_SYMBOL:-$PM_LIGHT_BG_HI}
+PM_STYLE_HISTORY=${PM_STYLE_HISTORY:-$PM_DARK_BG_SECONDARY}
+if [ -z "${CONTAINER+"exists"}" ]; then
+  # $CONTAINER not set.
+  # not in a container. Business as usual...
+  #PM_STYLE_USER=${PM_STYLE_USER:-$PM_YELLOW}
+  PM_STYLE_USER=${PM_STYLE_USER:-$PM_BOLD$PM_DARK_BG_SECONDARY}
+else
+  # If $CONTAINER is set then we are in a container
+  # Make sure it is set (auto or manual) inside any container
+  PM_STYLE_USER=${PM_STYLE_USER:-$PM_YELLOW}
+fi
+
+if [ "$USER" != "$(logname 2>/dev/null || echo "$LOGNAME")" ]; then
+  # user is different than the login user
+  PM_STYLE_USER=$PM_BOLD$PM_LIGHT_BG_HI
+fi
+if (( $(id -u) == 0 )); then 
+  # user is root
+  PM_STYLE_USER=$PM_STYLE_ROOT
+  PM_STYLE_SYMBOL=$PM_STYLE_ROOT
+fi
+
+PM_SYMB_UNTRACKED=${PM_SYMB_UNTRACKED:-"*"}
+PM_SYMB_STASH=${PM_SYMB_STASH:-"+"}
+
+# Escape the given strings
+#
+# Must be used for all strings injected in PS1 that may come from remote sources,
+# like $PWD, GIT branch names...
+_pm_escape()
+{
+  echo -nE "${1//\\/\\\\}"
+}
+
+# Git: get the branch name of the current git repo
+_pm_git_get_branch() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return
+
+  local branch
+  if branch="$(git symbolic-ref --short -q HEAD)"; then
+    _pm_escape "$branch"
+  else
+    # In detached head state, use commit instead
+    # No escape needed
+    git rev-parse --short -q HEAD
+  fi
+}
+
+# Git: get HEAD status (merging, rebasing, cherry-picking)
+_pm_git_head_status() {
+  local gitdir
+  gitdir="$(git rev-parse --git-dir 2>/dev/null)"
+  if [ -f "${gitdir}/MERGE_HEAD" ]; then
+    echo -n " MERGING"
+  elif [ -d "${gitdir}/rebase-apply" ] || [ -d "${gitdir}/rebase-merge" ]; then
+    echo -n " REBASING"
+  elif [ -f "${gitdir}/CHERRY_PICK_HEAD" ]; then
+    echo -n " CHERRY-PICKING"
+  fi
+}
+
+# Git: get changes in index and/or working tree (except untracked
+# or ignored)
+_pm_git_get_changes() {
+  LC_ALL=C git status --porcelain --untracked-files=no \
+    --ignored=no 2>/dev/null
+
+}
+
+# Git: check untracked files (use the return code)
+_pm_git_check_untracked() {
+  LC_ALL=C git status --porcelain --untracked-files=all \
+    --ignored=no | grep -q '^??' 2>/dev/null 1>&2
+}
+
+# Git: Construct and return (echo) git section of the prompt
+_pm_git() {
+  local branch
+  branch="$(_pm_git_get_branch)"
+  if [ -n "$branch" ]; then
+    # Most Git commands operate on local repository and does not
+    # communicate with remote origin. Therefore 'git status' may
+    # not report changes on remote origin (until 'git fetch', 
+    # 'git pull' etc.). Plus, querying remote origin may be slow
+    # and block this script. So, we will only check local repo.
+
+    local head_status
+    local remote=""
+    local section=""
+    local section_end=""
+
+    # check if this is a remote tracking branch
+    if git config --get branch."$branch".remote 2>/dev/null 1>&2; then
+      remote="yes"
+    fi
+
+    # check stash
+    if git rev-parse --verify -q refs/stash >/dev/null; then
+      section_end+="$PM_STYLE_GIT_COMMITS$PM_SYMB_STASH"
+    fi
+
+    # check untracked files
+    if _pm_git_check_untracked; then
+      section_end+="$PM_STYLE_GIT_CHANGES$PM_SYMB_UNTRACKED"
+    fi
+
+    # get HEAD status (merging, rebasing, cherry-picking)
+    head_status="$(_pm_git_head_status)" 
+    if [ -n "$head_status" ]; then
+      section_end+="$PM_STYLE_GIT_CHANGES$head_status]"
+      section+="$PM_STYLE_GIT_CHANGES[$branch"
+    else
+      # check changes in index and/or working tree
+      if [ -n "$(_pm_git_get_changes)" ]; then
+        section+="$PM_STYLE_GIT_CHANGES[$branch"
+        section_end+="$PM_STYLE_GIT_CHANGES]"
+      else
+        section+="$PM_STYLE_GIT[$branch"
+        section_end+="$PM_STYLE_GIT]"
+      fi
+    fi
+
+    if [ -n "$remote" ]; then
+      section="$PM_START_UNDERLINE$section$PM_STOP_UNDERLINE"
+    fi
+    echo -n "$section$section_end$PM_RESET"
+  fi
+}
+
+# Construct and return (echo) jobs section of the prompt
+_pm_jobs() {  
+  local result=""
+  local -i running stopped
+  running=$(jobs -pr | wc -l)
+  stopped=$(jobs -ps | wc -l)
+  if (( running )); then
+    result+="(${running}r"
+  fi
+  if (( stopped )); then
+    if [ -n "$result" ]; then
+      result+="/${stopped}s"
+    else
+      result+="(${stopped}s"
+    fi
+  fi
+  if [ -n "$result" ]; then
+    result="$PM_STYLE_JOBS${result})$PM_RESET"
+  fi
+
+  echo -nE "$result"
+}
+
+# Construct and return (echo) history number section ot the prompt
+_pm_history() {
+  echo -nE "$PM_STYLE_HISTORY[\!]$PM_RESET"
+}
+
+# Construct the multiline prompt
+#
+# This will be assigned to bash environment variable PROMPT_COMMAND and
+# will be executed each time bash displays a prompt. Therefore be wary of
+# it's execution time and only include commands that are required to run
+# each time prompt is displayed.
+_pm_set_prompt() {
+  # this should be called first to capture return code of the last
+  # command. Otherwise the return code will change
+  local -i err=$?
+  PM_ERR=''
+  if (( err != 0 )); then
+    PM_ERR="$PM_STYLE_ERR[$err]$PM_RESET"
+  fi
+  PM_CHROOT=''
+  if [ -r /etc/debian_chroot ]; then
+    PM_CHROOT="$PM_STYLE_CHROOT($(cat /etc/debian_chroot))$PM_RESET"
+  fi
+  PM_USER="$PM_STYLE_USER\u@\h:$PM_RESET"
+  PM_PATH="$PM_STYLE_PATH\w$PM_RESET"
+  PM_JOBS="$(_pm_jobs)"
+  PM_GIT="$(_pm_git)"
+  PM_PROMPT_SYMBOL="$PM_STYLE_SYMBOL\$$PM_RESET"
+  PM_HISTORY="$(_pm_history)"
+
+  PS1="$PM_CHROOT$PM_USER$PM_PATH"
+  PS1+="\n$PM_HISTORY$PM_JOBS$PM_GIT $PM_ERR$PM_PROMPT_SYMBOL "
+}
+
+prompt_on() {
+  PM_OLD_PS1=${PM_OLD_PS1:-$PS1}
+  PM_OLD_SHOPT="$(shopt -p promptvars)"
+  PM_OLD_PROMPT_COMMAND=$PROMPT_COMMAND
+
+  # Disable parameter/command expansion from PS1
+  shopt -u promptvars
+  PROMPT_COMMAND=_pm_set_prompt
+}
+
+prompt_off() {
+  $PM_OLD_SHOPT
+  PROMPT_COMMAND=$PM_OLD_PROMPT_COMMAND
+  PS1=$PM_OLD_PS1
+}
+
+# by default, sourcing this script changes the prompt
+prompt_on
