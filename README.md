@@ -9,7 +9,7 @@ No | Color Scheme: Ubuntu Default | Color Scheme: Solarized Dark
 2  | ![prompt full]               | ![prompt full solarized]
 3  | ![prompt root]               | ![prompt root solarized]
 
-**1**: When in home directory, **2**: (Almost) full prompt, **3**: Superuser, **4**: User other than login user
+**1**: When in home directory, **2**: (Almost) full prompt, **3**: Superuser
 
 **First prompt line**: `(chroot)user@machine:/working/dir`
 
