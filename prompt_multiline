@@ -107,7 +107,7 @@ if [ "$USER" != "$(logname 2>/dev/null || echo "$LOGNAME")" ]; then
   # user is different than the login user
   PM_STYLE_USER=$PM_BOLD$PM_LIGHT_BG_HI
 fi
-if (( $(id -u) == 0 )); then 
+if (( $(id -u) == 0 )); then
   # user is root
   PM_STYLE_USER=$PM_STYLE_ROOT
   PM_STYLE_SYMBOL=$PM_STYLE_ROOT
@@ -173,7 +173,7 @@ _pm_git() {
   if [ -n "$branch" ]; then
     # Most Git commands operate on local repository and does not
     # communicate with remote origin. Therefore 'git status' may
-    # not report changes on remote origin (until 'git fetch', 
+    # not report changes on remote origin (until 'git fetch',
     # 'git pull' etc.). Plus, querying remote origin may be slow
     # and block this script. So, we will only check local repo.
 
@@ -198,7 +198,7 @@ _pm_git() {
     fi
 
     # get HEAD status (merging, rebasing, cherry-picking)
-    head_status="$(_pm_git_head_status)" 
+    head_status="$(_pm_git_head_status)"
     if [ -n "$head_status" ]; then
       section_end+="$PM_STYLE_GIT_CHANGES$head_status]"
       section+="$PM_STYLE_GIT_CHANGES[$branch"
@@ -221,7 +221,7 @@ _pm_git() {
 }
 
 # Construct and return (echo) jobs section of the prompt
-_pm_jobs() {  
+_pm_jobs() {
   local result=""
   local -i running stopped
   running=$(jobs -pr | wc -l)
