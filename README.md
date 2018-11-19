@@ -49,7 +49,7 @@ unset pm_path
 ```
 
 ## License
-Prompt-Multiline, Copyright 2018 Hami Torun <htorun@e-fabrika.net>
+Prompt-Multiline, Copyright 2018 Hami Torun <hamitorun@e-fabrika.net>
 
 Licensed under the AGPL version 3
 
